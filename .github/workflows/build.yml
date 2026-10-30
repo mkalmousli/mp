@@ -1,0 +1,55 @@
+name: build
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, asset: mp-linux-x86_64, flags: -static }
+          - { os: ubuntu-24.04-arm, asset: mp-linux-arm64, flags: -static }
+          - { os: macos-latest, asset: mp-macos-arm64, flags: "" }
+          - { os: macos-15-intel, asset: mp-macos-x86_64, flags: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the build script
+        run: ./build.c build
+      - name: Build
+        run: cc -O2 -Wall ${{ matrix.flags }} -o ${{ matrix.asset }} src/*.c
+      - name: Smoke test
+        run: |
+          export MP_DIR="$(mktemp -d)"
+          ./${{ matrix.asset }} git smoke --version
+          ./${{ matrix.asset }} ls | grep smoke
+          ./${{ matrix.asset }} where smoke | grep GIT_CONFIG_GLOBAL
+          echo '{"model":{"display_name":"Smoke"}}' | ./${{ matrix.asset }} statusline | grep Smoke
+          ./${{ matrix.asset }} rm smoke -y
+          ! ./${{ matrix.asset }} rm smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum mp-* > sha256sums.txt
+      - name: Publish
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
