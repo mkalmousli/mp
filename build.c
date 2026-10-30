@@ -1,4 +1,5 @@
-#!/usr/bin/env -S sh -c 'tail -n +2 "$0" | cc -x c -o /tmp/mp-build - && exec /tmp/mp-build "$@"'
+#!/bin/sh
+tail -n +3 "$0" | cc -x c -o /tmp/mp-build - && exec /tmp/mp-build "$@"; exit 1
 // build.c - build, install and uninstall mp.   ./build.c [build|install|uninstall]
 #include <stdio.h>
 #include <stdlib.h>
